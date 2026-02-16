@@ -1,0 +1,9 @@
+duckdb==0.9.2
+pandas==2.1.4
+langchain-openai==0.1.13
+langchain-core==0.2.11
+langgraph==0.1.5
+openai>=1.32.0
+python-dotenv==1.0.0
+graphviz==0.20.1
+matplotlib==3.7.2

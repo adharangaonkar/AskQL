@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="280" viewBox="0 0 940 280">
+<defs>
+<marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+<polygon points="0 0, 10 3.5, 0 7" fill="#444" />
+</marker>
+</defs>
+<rect x="0" y="0" width="100%" height="100%" fill="white"/>
+<text x="470" y="28" font-family="Arial, sans-serif" font-size="20" text-anchor="middle" fill="#222">AskQL LangGraph Workflow</text>
+<line x1="135.0" y1="140" x2="165.0" y2="140" style="stroke:#444;stroke-width:2;fill:none" marker-end="url(#arrow)" />
+<line x1="775.0" y1="205" x2="485.0" y2="140" style="stroke:#444;stroke-width:2;fill:none" marker-end="url(#arrow)" />
+<line x1="775.0" y1="75" x2="805.0" y2="140" style="stroke:#444;stroke-width:2;fill:none" marker-end="url(#arrow)" />
+<line x1="295.0" y1="140" x2="325.0" y2="140" style="stroke:#444;stroke-width:2;fill:none" marker-end="url(#arrow)" />
+<line x1="455.0" y1="140" x2="485.0" y2="140" style="stroke:#444;stroke-width:2;fill:none;stroke-dasharray:7,5" marker-end="url(#arrow)" />
+<text x="470.0" y="132.0" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#333">valid</text>
+<line x1="455.0" y1="140" x2="805.0" y2="140" style="stroke:#444;stroke-width:2;fill:none;stroke-dasharray:7,5" marker-end="url(#arrow)" />
+<text x="630.0" y="132.0" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#333">invalid</text>
+<line x1="615.0" y1="132" x2="645.0" y2="83" style="stroke:#444;stroke-width:2;fill:none;stroke-dasharray:7,5" marker-end="url(#arrow)" />
+<text x="630.0" y="99.5" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#333">success</text>
+<line x1="615.0" y1="148" x2="645.0" y2="197" style="stroke:#444;stroke-width:2;fill:none;stroke-dasharray:7,5" marker-end="url(#arrow)" />
+<text x="630.0" y="164.5" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#333">retry</text>
+<line x1="615.0" y1="140" x2="805.0" y2="140" style="stroke:#444;stroke-width:2;fill:none;stroke-dasharray:7,5" marker-end="url(#arrow)" />
+<text x="710.0" y="132.0" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#333">max_retries</text>
+<rect x="5.0" y="118.0" width="130" height="44" rx="12" ry="12" fill="#ffdfba" stroke="#333" stroke-width="1.5" />
+<text x="70" y="145" font-family="Arial, sans-serif" font-size="13" text-anchor="middle" fill="#222">__start__</text>
+<rect x="805.0" y="118.0" width="130" height="44" rx="12" ry="12" fill="#baffc9" stroke="#333" stroke-width="1.5" />
+<text x="870" y="145" font-family="Arial, sans-serif" font-size="13" text-anchor="middle" fill="#222">__end__</text>
+<rect x="165.0" y="118.0" width="130" height="44" rx="12" ry="12" fill="#fad7de" stroke="#333" stroke-width="1.5" />
+<text x="230" y="145" font-family="Arial, sans-serif" font-size="13" text-anchor="middle" fill="#222">generate_sql</text>
+<rect x="325.0" y="118.0" width="130" height="44" rx="12" ry="12" fill="#fad7de" stroke="#333" stroke-width="1.5" />
+<text x="390" y="145" font-family="Arial, sans-serif" font-size="13" text-anchor="middle" fill="#222">validate_sql</text>
+<rect x="485.0" y="118.0" width="130" height="44" rx="12" ry="12" fill="#fad7de" stroke="#333" stroke-width="1.5" />
+<text x="550" y="145" font-family="Arial, sans-serif" font-size="13" text-anchor="middle" fill="#222">execute_query</text>
+<rect x="645.0" y="183.0" width="130" height="44" rx="12" ry="12" fill="#fad7de" stroke="#333" stroke-width="1.5" />
+<text x="710" y="210" font-family="Arial, sans-serif" font-size="13" text-anchor="middle" fill="#222">correct_sql</text>
+<rect x="645.0" y="53.0" width="130" height="44" rx="12" ry="12" fill="#fad7de" stroke="#333" stroke-width="1.5" />
+<text x="710" y="80" font-family="Arial, sans-serif" font-size="13" text-anchor="middle" fill="#222">format_results</text>
+</svg>

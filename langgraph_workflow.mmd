@@ -1,0 +1,21 @@
+%%{init: {'flowchart': {'curve': 'linear'}}}%%
+graph TD;
+	__start__[__start__]:::startclass;
+	__end__[__end__]:::endclass;
+	generate_sql([generate_sql]):::otherclass;
+	validate_sql([validate_sql]):::otherclass;
+	execute_query([execute_query]):::otherclass;
+	correct_sql([correct_sql]):::otherclass;
+	format_results([format_results]):::otherclass;
+	__start__ --> generate_sql;
+	correct_sql --> execute_query;
+	format_results --> __end__;
+	generate_sql --> validate_sql;
+	validate_sql -. valid .-> execute_query;
+	validate_sql -. invalid .-> __end__;
+	execute_query -. success .-> format_results;
+	execute_query -. retry .-> correct_sql;
+	execute_query -. max_retries .-> __end__;
+	classDef startclass fill:#ffdfba;
+	classDef endclass fill:#baffc9;
+	classDef otherclass fill:#fad7de;
