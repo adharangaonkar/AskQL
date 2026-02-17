@@ -271,7 +271,7 @@ def build_result(question: str, final_state: dict) -> Dict[str, Any]:
 
 def create_query_runner(
     openai_api_key: str,
-    schema_csv_path: str = "database_schema.csv",
+    schema_csv_path: str = "data/database_schema.csv",
     database_path: str = "data/askql.duckdb",
     model: str = DEFAULT_MODEL,
 ):
@@ -289,7 +289,7 @@ def create_query_runner(
 def query(
     question: str,
     openai_api_key: str,
-    schema_csv_path: str = "database_schema.csv",
+    schema_csv_path: str = "data/database_schema.csv",
     database_path: str = "data/askql.duckdb",
     model: str = DEFAULT_MODEL,
 ) -> Dict[str, Any]:
@@ -308,7 +308,7 @@ class BasicSQLAgent:
     def __init__(
         self,
         openai_api_key: str,
-        schema_csv_path: str = "database_schema.csv",
+        schema_csv_path: str = "data/database_schema.csv",
         database_path: str = "data/askql.duckdb",
         model: str = DEFAULT_MODEL,
     ):

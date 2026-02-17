@@ -156,7 +156,8 @@ AskQL/
 ├── data/
 │   ├── setup_database.py    # Database creation script
 │   └── askql.duckdb         # DuckDB database file
-├── database_schema.csv      # Schema definition
+│   ├── database_schema.csv  # Schema definition
+│   └── duckdb.ipynb         # DuckDB exploration notebook
 ├── test_correction.py       # Test script for error handling
 ├── requirements.txt         # Python dependencies
 └── .env                     # API keys (not in git)

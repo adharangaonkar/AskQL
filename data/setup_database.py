@@ -149,7 +149,7 @@ def main():
     """Main function to set up the database"""
     # Paths
     db_path = "data/askql.duckdb"
-    schema_csv = "database_schema.csv"
+    schema_csv = "data/database_schema.csv"
 
     # Check if schema CSV exists
     if not os.path.exists(schema_csv):
