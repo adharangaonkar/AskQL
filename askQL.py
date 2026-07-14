@@ -114,8 +114,14 @@ Database Schema:
 Rules:
 1. Only use tables and columns from the schema
 2. Use DuckDB SQL syntax
-3. Return ONLY SQL (no explanation)
-4. Ensure SQL is valid
+3. Return ONLY a single SQL statement (no explanation, no multiple statements)
+4. The query must start with SELECT — for complex logic (rankings, running totals,
+   filtering on an aggregate, multi-step transformations), use a subquery or
+   derived table (e.g. `SELECT ... FROM (SELECT ...) AS sub`) instead of a
+   WITH/CTE clause
+5. Joins, window functions (e.g. ROW_NUMBER, RANK, SUM OVER), GROUP BY, and
+   subqueries are all supported — use them as needed for complex questions
+6. Ensure SQL is valid and executable
 
 User Question: {state['user_question']}
 
@@ -138,6 +144,7 @@ def make_validate_sql_node(database_path: str):
 
         if not sql.upper().startswith("SELECT"):
             state["validation_error"] = "Only SELECT queries are allowed for safety"
+            state["safety_blocked"] = True
             return state
 
         try:
@@ -186,9 +193,10 @@ def make_correct_sql_node(llm: ChatOpenAI):
     def correct_sql(state: dict) -> dict:
         try:
             state["retry_count"] = state.get("retry_count", 0) + 1
+            error = state.get("validation_error") or state.get("execution_error")
 
             prompt = f"""The SQL query failed with this error:
-{state['execution_error']}
+{error}
 
 Failed SQL:
 {state['generated_sql']}
@@ -204,8 +212,12 @@ Return a corrected DuckDB SQL query.
 Rules:
 1. Use only schema tables/columns
 2. Use valid DuckDB SQL
-3. Return ONLY SQL
-4. Must be SELECT
+3. Return ONLY a single SQL statement
+4. Must start with SELECT — for complex logic, use a subquery/derived table
+   instead of a WITH/CTE clause
+5. Joins, window functions, GROUP BY, and subqueries are all supported
+6. Window functions cannot be used directly in a WHERE/HAVING clause — wrap
+   the query in a subquery and filter on the window function's result there
 
 Corrected SQL Query:"""
 
@@ -216,13 +228,14 @@ Corrected SQL Query:"""
             history.append(
                 {
                     "attempt": state["retry_count"],
-                    "error": state["execution_error"],
+                    "error": error,
                     "original_sql": state["generated_sql"],
                     "corrected_sql": corrected_sql,
                 }
             )
 
             state["generated_sql"] = corrected_sql
+            state["validation_error"] = ""
             state["execution_error"] = ""
         except Exception as exc:
             state["error"] = f"SQL correction failed: {exc}"
@@ -256,7 +269,13 @@ def route_after_schema(state: dict) -> str:
 
 
 def route_after_validation(state: dict) -> str:
-    return "invalid" if state.get("validation_error") else "valid"
+    if state.get("validation_error"):
+        if state.get("safety_blocked"):
+            return "max_retries"
+        if state.get("retry_count", 0) < MAX_RETRIES:
+            return "retry"
+        return "max_retries"
+    return "valid"
 
 
 def route_after_execution(state: dict) -> str:
@@ -288,7 +307,7 @@ def build_workflow(llm: ChatOpenAI, database_path: str):
     workflow.add_conditional_edges(
         "validate_sql",
         route_after_validation,
-        {"valid": "execute_query", "invalid": END},
+        {"valid": "execute_query", "retry": "correct_sql", "max_retries": END},
     )
 
     workflow.add_conditional_edges(
@@ -297,7 +316,7 @@ def build_workflow(llm: ChatOpenAI, database_path: str):
         {"success": "format_results", "retry": "correct_sql", "max_retries": END},
     )
 
-    workflow.add_edge("correct_sql", "execute_query")
+    workflow.add_edge("correct_sql", "validate_sql")
     workflow.add_edge("format_results", END)
 
     return workflow.compile()
@@ -311,6 +330,7 @@ def initial_state(question: str) -> dict:
         "error": "",
         "is_valid": False,
         "validation_error": "",
+        "safety_blocked": False,
         "execution_error": "",
         "execution_time": 0.0,
         "rows_affected": 0,

@@ -4,10 +4,10 @@ A natural language to SQL agent built with LangChain and LangGraph. Converts que
 
 ## Features
 
-- **Query Generation**: Converts natural language to DuckDB SQL
+- **Query Generation**: Converts natural language to DuckDB SQL, including complex queries (joins, aggregations, window functions, subqueries)
 - **Automatic Execution**: Runs queries and returns real data
 - **Validation**: Enforces SELECT-only queries for safety
-- **Error Correction**: Automatically fixes common SQL mistakes (up to 3 retries)
+- **Error Correction**: Automatically fixes both SQL syntax errors and execution errors (up to 3 retries) — safety rejections (non-SELECT queries) are never retried
 - **Multi-Node Workflow**: Uses LangGraph for robust query processing
 
 ## Installation
@@ -114,6 +114,28 @@ SQL: DELETE FROM customers;
 Error: Only SELECT queries are allowed for safety
 ```
 
+**Complex Query with Window Functions (self-corrected):**
+```
+Question: "For each city, find the single customer with the highest total
+           spending, ranking customers by spending within each city"
+```
+The model is instructed to express this kind of "rank, then filter" logic as a
+subquery/derived table rather than a `WITH` (CTE) clause. If its first attempt
+puts the window function directly in `WHERE`/`HAVING` (invalid SQL), validation
+catches the syntax error and routes it back through **Correct SQL** to retry —
+same retry budget as execution errors, capped at 3 attempts:
+```sql
+SELECT city, name, customer_id, total_spending, rank
+FROM (
+    SELECT c.city, c.name, c.customer_id, SUM(o.total_amount) AS total_spending,
+           RANK() OVER (PARTITION BY c.city ORDER BY SUM(o.total_amount) DESC) AS rank
+    FROM customers c
+    JOIN orders o ON c.customer_id = o.customer_id
+    GROUP BY c.city, c.name, c.customer_id
+) subquery
+WHERE rank = 1;
+```
+
 ## Architecture
 
 The agent uses a 6-node LangGraph workflow with conditional routing:
@@ -137,48 +159,48 @@ The agent uses a 6-node LangGraph workflow with conditional routing:
 └────────┬────────┘
          │
          v
-┌─────────────────┐
-│  Validate SQL   │  Check syntax & safety (SELECT-only)
+┌─────────────────┐  <───────────────────┐
+│  Validate SQL   │  Check syntax (EXPLAIN)│
+└────────┬────────┘  & safety (SELECT-only)│
+         │                                 │
+         ├── safety-blocked ──────────────────┐
+         │   (never retried)                  │
+         ├── syntax error, retries < 3 ──┐     │
+         │                                v     │
+         │ valid                  ┌─────────────────┐
+         v                        │  Correct SQL    │  LLM fixes the error
+┌─────────────────┐               └────────┬────────┘
+│ Execute Query   │  Run SQL on DuckDB     │
+└────────┬────────┘                        │
+         │                                 │
+         ├── error, retries < 3 ───────────┘
+         │
+         │ success                       [END]
+         v                           (return error /
+┌─────────────────┐                  max retries reached)
+│ Format Results  │
 └────────┬────────┘
          │
-         ├──── invalid ────────────────┐
-         │                              │
-         │ valid                        v
-         v                            [END]
-┌─────────────────┐                 (return error)
-│ Execute Query   │  Run SQL on DuckDB
-└────────┬────────┘
-         │
-         ├──── error ──────┐
-         │                 │
-         │ success         v
-         v            ┌─────────────────┐
-┌─────────────────┐  │  Correct SQL    │  LLM fixes error
-│ Format Results  │  └────────┬────────┘
-└────────┬────────┘           │
-         │                    │ retry (max 3)
-         v                    │
-       [END]                  │
-   (return results)           │
-         ^                    │
-         │                    │
-         └────────────────────┘
+         v
+       [END]
+   (return results)
 ```
 
 ### Workflow Nodes
 
 1. **Get Schema**: Introspects the live DuckDB database's `information_schema` to build the schema description used by the LLM (no static schema file needed)
-2. **Generate SQL**: LLM converts natural language to SQL using the introspected schema
+2. **Generate SQL**: LLM converts natural language to SQL using the introspected schema. Instructed to use subqueries/derived tables instead of `WITH` (CTE) clauses for complex logic like rankings or filtering on an aggregate
 3. **Validate SQL**: Checks syntax with DuckDB EXPLAIN and enforces SELECT-only
 4. **Execute Query**: Runs validated SQL and captures results
-5. **Correct SQL**: Uses LLM to fix failed queries (triggered on execution errors)
+5. **Correct SQL**: Uses LLM to fix failed queries — triggered by *either* a validation syntax error or an execution error (but never by a SELECT-only safety rejection, which always fails immediately)
 6. **Format Results**: Converts raw data to readable tables
 
 ### Conditional Routing
 
 - After **Get Schema**: `ok` → Generate SQL | `error` → END
-- After **Validate**: `valid` → Execute | `invalid` → END
-- After **Execute**: `success` → Format | `error` → Correct (if retries < 3) | `max_retries` → END
+- After **Validate**: `valid` → Execute | syntax error & retries < 3 → Correct SQL | safety-blocked or max retries → END
+- After **Execute**: `success` → Format | `error` & retries < 3 → Correct SQL | `max_retries` → END
+- After **Correct SQL**: always back to Validate SQL (re-checked before executing again)
 
 ## Database Schema
 
