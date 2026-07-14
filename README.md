@@ -54,10 +54,13 @@ python data/setup_database.py
 
 ## Usage
 
-Run the agent with test queries:
+Run the bundled example queries:
 ```bash
-python askQL.py
+python demo_queries.py
 ```
+
+`askQL.py` is the library entry point; running it directly only prints a short
+usage message. Import `BasicSQLAgent` or `query` to use AskQL in your own code.
 
 Or use it programmatically:
 ```python
@@ -239,9 +242,9 @@ AskQL/
 
 ## Testing
 
-Run the test suite:
+Run the example queries and error-handling checks:
 ```bash
-python askQL.py              # Run main test cases
+python demo_queries.py       # Run sample natural-language queries
 python test_correction.py    # Test error handling
 ```
 

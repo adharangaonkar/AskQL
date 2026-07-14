@@ -9,13 +9,14 @@ graph TD;
 	correct_sql(correct_sql)
 	format_results(format_results)
 	__start__ --> get_schema;
-	correct_sql --> execute_query;
+	correct_sql --> validate_sql;
 	format_results --> __end__;
 	generate_sql --> validate_sql;
 	get_schema -. &nbsp;ok&nbsp; .-> generate_sql;
 	get_schema -. &nbsp;error&nbsp; .-> __end__;
 	validate_sql -. &nbsp;valid&nbsp; .-> execute_query;
-	validate_sql -. &nbsp;invalid&nbsp; .-> __end__;
+	validate_sql -. &nbsp;retry&nbsp; .-> correct_sql;
+	validate_sql -. &nbsp;max_retries&nbsp; .-> __end__;
 	execute_query -. &nbsp;success&nbsp; .-> format_results;
 	execute_query -. &nbsp;retry&nbsp; .-> correct_sql;
 	execute_query -. &nbsp;max_retries&nbsp; .-> __end__;
