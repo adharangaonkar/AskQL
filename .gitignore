@@ -10,8 +10,10 @@ __pycache__/
 .Python
 env/
 venv/
+.venv/
 askql_env/
 *.egg-info/
+.ipynb_checkpoints/
 
 # Database files
 data/*.duckdb

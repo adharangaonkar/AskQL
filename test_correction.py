@@ -10,13 +10,14 @@ load_dotenv()
 def test_error_correction():
     """Test the error correction feature"""
 
+    provider = os.getenv("LLM_PROVIDER", "openai")
     api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
+    if provider == "openai" and not api_key:
         print("Please set OPENAI_API_KEY environment variable")
         return
 
     # Create agent
-    agent = BasicSQLAgent(api_key)
+    agent = BasicSQLAgent(api_key, provider=provider)
 
     # Test case that will likely trigger an error that can be corrected
     # We'll ask about a table that might be misspelled

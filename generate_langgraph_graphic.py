@@ -32,15 +32,16 @@ def main() -> None:
     # Hand-tuned layout for this workflow.
     pos = {
         "__start__": (70, 140),
-        "generate_sql": (230, 140),
-        "validate_sql": (390, 140),
-        "execute_query": (550, 140),
-        "format_results": (710, 75),
-        "correct_sql": (710, 205),
-        "__end__": (870, 140),
+        "get_schema": (215, 140),
+        "generate_sql": (375, 140),
+        "validate_sql": (535, 140),
+        "execute_query": (695, 140),
+        "format_results": (855, 75),
+        "correct_sql": (855, 205),
+        "__end__": (1015, 140),
     }
 
-    width, height = 940, 280
+    width, height = 1085, 280
     box_w, box_h = 130, 44
 
     lines: list[str] = []

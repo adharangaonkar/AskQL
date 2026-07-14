@@ -5,14 +5,58 @@ from typing import Any, Dict
 import duckdb
 import pandas as pd
 from dotenv import load_dotenv
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import HumanMessage
 from langchain_openai import ChatOpenAI
+from langchain_ollama import ChatOllama
 from langgraph.graph import END, StateGraph
 
 load_dotenv()
 
 MAX_RETRIES = 3
-DEFAULT_MODEL = "gpt-3.5-turbo"
+DEFAULT_MODELS = {
+    "openai": "gpt-3.5-turbo",
+    "ollama": "llama3.1",
+    "lmstudio": "local-model",
+}
+
+
+def build_llm(provider: str = None, model: str = None, **kwargs):
+    """Construct a chat LLM for the given provider (openai | ollama | lmstudio)."""
+    provider = (provider or os.getenv("LLM_PROVIDER", "openai")).lower()
+
+    if provider == "openai":
+        api_key = kwargs.pop("api_key", None) or os.getenv("OPENAI_API_KEY")
+        return ChatOpenAI(
+            api_key=api_key,
+            model=model or DEFAULT_MODELS["openai"],
+            temperature=0,
+            **kwargs,
+        )
+
+    if provider == "ollama":
+        kwargs.pop("api_key", None)
+        base_url = kwargs.pop("base_url", None) or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+        # The pinned langchain-ollama version has no base_url constructor param;
+        # its underlying ollama.Client reads OLLAMA_HOST from the environment instead.
+        os.environ["OLLAMA_HOST"] = base_url
+        return ChatOllama(
+            model=model or os.getenv("OLLAMA_MODEL", DEFAULT_MODELS["ollama"]),
+            temperature=0,
+            **kwargs,
+        )
+
+    if provider == "lmstudio":
+        kwargs.pop("api_key", None)
+        base_url = kwargs.pop("base_url", None) or os.getenv("LMSTUDIO_BASE_URL", "http://localhost:1234/v1")
+        return ChatOpenAI(
+            api_key="lm-studio",  # LM Studio ignores the key but the SDK requires a non-empty string
+            base_url=base_url,
+            model=model or os.getenv("LMSTUDIO_MODEL", DEFAULT_MODELS["lmstudio"]),
+            temperature=0,
+            **kwargs,
+        )
+
+    raise ValueError(f"Unknown LLM_PROVIDER: {provider!r}. Expected 'openai', 'ollama', or 'lmstudio'.")
 
 
 def clean_sql(sql_text: str) -> str:
@@ -25,28 +69,47 @@ def clean_sql(sql_text: str) -> str:
     return sql
 
 
-def load_schema_text(schema_csv_path: str) -> str:
-    """Load schema CSV and render it as prompt-friendly text."""
-    schema_df = pd.read_csv(schema_csv_path)
+def make_get_schema_node(database_path: str):
+    def get_schema(state: dict) -> dict:
+        try:
+            conn = duckdb.connect(database_path, read_only=True)
+            try:
+                columns = conn.execute(
+                    """
+                    SELECT table_name, column_name, data_type
+                    FROM information_schema.columns
+                    WHERE table_schema = 'main'
+                    ORDER BY table_name, ordinal_position
+                    """
+                ).fetchall()
+            finally:
+                conn.close()
 
-    parts = []
-    for table in schema_df["table_name"].unique():
-        parts.append(f"\nTable: {table}")
-        parts.append("Columns:")
-        table_cols = schema_df[schema_df["table_name"] == table]
-        for _, col in table_cols.iterrows():
-            parts.append(f"  - {col['column_name']} ({col['data_type']})")
+            parts = []
+            current_table = None
+            for table_name, column_name, data_type in columns:
+                if table_name != current_table:
+                    parts.append(f"\nTable: {table_name}")
+                    parts.append("Columns:")
+                    current_table = table_name
+                parts.append(f"  - {column_name} ({data_type})")
 
-    return "\n".join(parts)
+            state["schema_info"] = "\n".join(parts).strip()
+        except Exception as exc:
+            state["error"] = f"Schema introspection failed: {exc}"
+
+        return state
+
+    return get_schema
 
 
-def make_generate_sql_node(llm: ChatOpenAI, schema_info: str):
+def make_generate_sql_node(llm: ChatOpenAI):
     def generate_sql(state: dict) -> dict:
         try:
             prompt = f"""You are a SQL expert. Generate a DuckDB SQL query based on the user's question.
 
 Database Schema:
-{schema_info}
+{state['schema_info']}
 
 Rules:
 1. Only use tables and columns from the schema
@@ -57,7 +120,7 @@ Rules:
 User Question: {state['user_question']}
 
 SQL Query:"""
-            response = llm.invoke([SystemMessage(content=prompt)])
+            response = llm.invoke([HumanMessage(content=prompt)])
             state["generated_sql"] = clean_sql(str(response.content))
         except Exception as exc:
             state["error"] = f"SQL generation failed: {exc}"
@@ -119,7 +182,7 @@ def make_execute_query_node(database_path: str):
     return execute_query
 
 
-def make_correct_sql_node(llm: ChatOpenAI, schema_info: str):
+def make_correct_sql_node(llm: ChatOpenAI):
     def correct_sql(state: dict) -> dict:
         try:
             state["retry_count"] = state.get("retry_count", 0) + 1
@@ -133,7 +196,7 @@ Failed SQL:
 Original question: {state['user_question']}
 
 Database Schema:
-{schema_info}
+{state['schema_info']}
 
 This is attempt {state['retry_count']} of {MAX_RETRIES}.
 
@@ -146,7 +209,7 @@ Rules:
 
 Corrected SQL Query:"""
 
-            response = llm.invoke([SystemMessage(content=prompt)])
+            response = llm.invoke([HumanMessage(content=prompt)])
             corrected_sql = clean_sql(str(response.content))
 
             history = state.setdefault("correction_history", [])
@@ -188,6 +251,10 @@ def format_results(state: dict) -> dict:
     return state
 
 
+def route_after_schema(state: dict) -> str:
+    return "error" if state.get("error") else "ok"
+
+
 def route_after_validation(state: dict) -> str:
     return "invalid" if state.get("validation_error") else "valid"
 
@@ -200,16 +267,22 @@ def route_after_execution(state: dict) -> str:
     return "success"
 
 
-def build_workflow(llm: ChatOpenAI, schema_info: str, database_path: str):
+def build_workflow(llm: ChatOpenAI, database_path: str):
     workflow = StateGraph(dict)
 
-    workflow.add_node("generate_sql", make_generate_sql_node(llm, schema_info))
+    workflow.add_node("get_schema", make_get_schema_node(database_path))
+    workflow.add_node("generate_sql", make_generate_sql_node(llm))
     workflow.add_node("validate_sql", make_validate_sql_node(database_path))
     workflow.add_node("execute_query", make_execute_query_node(database_path))
-    workflow.add_node("correct_sql", make_correct_sql_node(llm, schema_info))
+    workflow.add_node("correct_sql", make_correct_sql_node(llm))
     workflow.add_node("format_results", format_results)
 
-    workflow.set_entry_point("generate_sql")
+    workflow.set_entry_point("get_schema")
+    workflow.add_conditional_edges(
+        "get_schema",
+        route_after_schema,
+        {"ok": "generate_sql", "error": END},
+    )
     workflow.add_edge("generate_sql", "validate_sql")
 
     workflow.add_conditional_edges(
@@ -233,6 +306,7 @@ def build_workflow(llm: ChatOpenAI, schema_info: str, database_path: str):
 def initial_state(question: str) -> dict:
     return {
         "user_question": question,
+        "schema_info": "",
         "generated_sql": "",
         "error": "",
         "is_valid": False,
@@ -270,14 +344,13 @@ def build_result(question: str, final_state: dict) -> Dict[str, Any]:
 
 
 def create_query_runner(
-    openai_api_key: str,
-    schema_csv_path: str = "data/database_schema.csv",
+    openai_api_key: str = None,
     database_path: str = "data/askql.duckdb",
-    model: str = DEFAULT_MODEL,
+    model: str = None,
+    provider: str = None,
 ):
-    llm = ChatOpenAI(api_key=openai_api_key, model=model, temperature=0)
-    schema_info = load_schema_text(schema_csv_path)
-    workflow = build_workflow(llm, schema_info, database_path)
+    llm = build_llm(provider=provider, model=model, api_key=openai_api_key)
+    workflow = build_workflow(llm, database_path)
 
     def run(question: str) -> Dict[str, Any]:
         final_state = workflow.invoke(initial_state(question))
@@ -288,16 +361,16 @@ def create_query_runner(
 
 def query(
     question: str,
-    openai_api_key: str,
-    schema_csv_path: str = "data/database_schema.csv",
+    openai_api_key: str = None,
     database_path: str = "data/askql.duckdb",
-    model: str = DEFAULT_MODEL,
+    model: str = None,
+    provider: str = None,
 ) -> Dict[str, Any]:
     run, _ = create_query_runner(
         openai_api_key=openai_api_key,
-        schema_csv_path=schema_csv_path,
         database_path=database_path,
         model=model,
+        provider=provider,
     )
     return run(question)
 
@@ -307,16 +380,16 @@ class BasicSQLAgent:
 
     def __init__(
         self,
-        openai_api_key: str,
-        schema_csv_path: str = "data/database_schema.csv",
+        openai_api_key: str = None,
         database_path: str = "data/askql.duckdb",
-        model: str = DEFAULT_MODEL,
+        model: str = None,
+        provider: str = None,
     ):
         self.run_query, self.workflow = create_query_runner(
             openai_api_key=openai_api_key,
-            schema_csv_path=schema_csv_path,
             database_path=database_path,
             model=model,
+            provider=provider,
         )
 
     def query(self, question: str) -> Dict[str, Any]:

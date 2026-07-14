@@ -8,12 +8,13 @@ load_dotenv()
 
 
 def main() -> None:
+    provider = os.getenv("LLM_PROVIDER", "openai")
     api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
+    if provider == "openai" and not api_key:
         print("Please set OPENAI_API_KEY environment variable")
         return
 
-    agent = BasicSQLAgent(api_key)
+    agent = BasicSQLAgent(api_key, provider=provider)
 
     demo_queries = [
         "How many customers are there?",

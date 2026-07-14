@@ -1,7 +1,7 @@
 """
 Database Setup Script for AskQL
 
-Creates a DuckDB database with sample data based on the schema CSV file.
+Creates a DuckDB database with sample data based on the schema SQL file.
 Generates realistic test data for customers, products, and orders tables.
 """
 
@@ -11,40 +11,24 @@ from datetime import datetime, timedelta
 import random
 import os
 
-def create_tables_from_schema(conn, schema_csv_path):
+def create_tables_from_schema(conn, schema_sql_path):
     """
-    Create database tables from schema CSV file
+    Create database tables by executing the schema DDL file
 
     Args:
         conn: DuckDB connection
-        schema_csv_path: Path to the schema CSV file
+        schema_sql_path: Path to the schema SQL file
     """
-    print("Reading schema from CSV...")
-    schema_df = pd.read_csv(schema_csv_path)
+    print("Reading schema from SQL file...")
+    with open(schema_sql_path) as f:
+        schema_sql = f.read()
 
-    # Group by table
-    for table_name in schema_df['table_name'].unique():
-        table_cols = schema_df[schema_df['table_name'] == table_name]
-
-        # Build column definitions
-        col_defs = []
-        for _, col in table_cols.iterrows():
-            col_def = f"{col['column_name']} {col['data_type']}"
-
-            # Add NOT NULL constraint
-            if col['nullable'] == 'NO':
-                col_def += " NOT NULL"
-
-            # Add PRIMARY KEY constraint
-            if col['key'] == 'PRI':
-                col_def += " PRIMARY KEY"
-
-            col_defs.append(col_def)
-
-        # Create table
-        create_sql = f"CREATE TABLE {table_name} ({', '.join(col_defs)})"
-        print(f"Creating table: {table_name}")
-        conn.execute(create_sql)
+    for statement in schema_sql.split(';'):
+        statement = statement.strip()
+        if not statement:
+            continue
+        print(f"Executing: {statement.splitlines()[0]}...")
+        conn.execute(statement)
 
     print("All tables created successfully!")
 
@@ -149,11 +133,11 @@ def main():
     """Main function to set up the database"""
     # Paths
     db_path = "data/askql.duckdb"
-    schema_csv = "data/database_schema.csv"
+    schema_sql = "data/schema.sql"
 
-    # Check if schema CSV exists
-    if not os.path.exists(schema_csv):
-        print(f"Error: Schema file not found at {schema_csv}")
+    # Check if schema SQL file exists
+    if not os.path.exists(schema_sql):
+        print(f"Error: Schema file not found at {schema_sql}")
         return
 
     # Remove existing database if it exists
@@ -168,7 +152,7 @@ def main():
 
     try:
         # Create tables from schema
-        create_tables_from_schema(conn, schema_csv)
+        create_tables_from_schema(conn, schema_sql)
 
         # Generate sample data
         generate_sample_data(conn)
